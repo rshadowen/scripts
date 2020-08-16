@@ -1,0 +1,3 @@
+
+find . -name '*.[cChHg]' -exec grep "$1" {} \; -print
+

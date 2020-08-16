@@ -1,0 +1,194 @@
+#!/usr/bin/perl
+
+use Cwd qw(getcwd);
+
+@ExtList = ( "flac", "wav", "mp3" );
+$FileCmd = "mv";
+
+####
+#### Usage
+####
+sub Usage
+{
+$UsageMessage = <<END;
+Moves files named like "artist - album - track - title" to artist/album dir.
+Target directories are relative to file location.
+Moves flac, mp3, and wav files.
+Usage: orgmusic [-cdhv] <dir> [...]
+where:
+  -c        Copy mode - copy files instead of moving.
+  -d        Debug option - only show copy names, do not copy.
+  -h        Help - show this message.
+  -v        Verbose option - list files to copy.
+  <dir>     Directories to process.  If non given then defaults to current dir.
+END
+
+  print STDERR $UsageMessage;
+  exit 0;
+}
+
+
+####
+#### Msg
+####
+sub Msg
+{
+  print "@_" . "\n";
+}
+
+
+####
+#### Do
+####
+sub Do
+{
+  ($DebugMode || $VerboseMode) && &Msg(":::: ", @_);
+
+  !$DebugMode && system(@_);
+}
+
+
+####
+#### QuoteStr
+####
+sub QuoteStr
+{
+  local($str) = $_[0];
+  $str =~ s/'/__SnGlQuOtE__/g;
+  $str =~ s/__SnGlQuOtE__/'"'"'/g;
+  $str = "'$str'";
+  return($str);
+}
+
+
+####
+####  processFile
+####
+sub processFile
+{
+  local($origName) = $_[0];
+  local($newName);
+  local($name);
+  local($artist, $album, $track, $title, $ext);
+  local($arStr, $alStr, $fnStr);
+  local($src, $tgt);
+
+  $newName = $origName;
+  $name = $origName;
+  $name =~ s/\.[^.]+$//;
+  @ubParts = split(/_-_/, $name);
+  if ($#ubParts > 2) {
+    $name =~ s/_/ /g;
+    $newName =~ s/_/ /g;
+  }
+  @wsParts = split(/ - /, $name);
+  if ($#wsParts != 3) {
+    &Msg("Can't parse name: $origName");
+    return(1);
+  }
+  $artist = $wsParts[0];
+  $album = $wsParts[1];
+  $track = $wsParts[2];
+  $title = $wsParts[3];
+
+  if ($VerboseMode || $DebugMode) {
+    &Msg("File: $origName");
+    &Msg("Artist: $artist");
+    &Msg("Album: $album");
+    &Msg("Track: $track");
+    &Msg("Title: $title");
+    &Msg("");
+  }
+
+  if (opendir(ARTDIR, "$artist")) {
+    closedir(ARTDIR) || die "Couldn't close dir '$artist': $!\n";
+  }
+  else {
+    mkdir("$artist") || die "Couldn't make dir '$artist': $!\n";
+  }
+
+  if (opendir(ALBDIR, "$artist/$album")) {
+    $VerboseMode && &Msg("Creating dir '$artist'");
+    closedir(ALBDIR) || die "Couldn't close dir '$artist/$album': $!\n";
+  }
+  else {
+    $VerboseMode && &Msg("Creating dir '$artist/$album'");
+    mkdir("$artist/$album") || die "Couldn't make dir '$artist/$album': $!\n";
+  }
+
+  $src = &QuoteStr($origName);
+
+  $arStr = &QuoteStr($artist);
+  $alStr = &QuoteStr($album);
+  $fnStr = &QuoteStr($newName);
+  $tgt = "$arStr/$alStr/$fnStr";
+
+  if (! -e $tgt) {
+    &Do("$FileCmd $src $tgt");
+  }
+  else {
+    &Msg("File '$tgt' already exists - skipping");
+  }
+
+  return(0);
+}
+
+
+####
+####  processDir
+####
+sub processDir
+{
+  local($dirName) = $_[0];
+  local($prevDir);
+
+  $prevDir = getcwd();
+
+  chdir $dirName || die "Couldn't change to dir '$dirName': $!\n";
+
+  &Msg("Processing $dirName...");
+
+  opendir(DD, ".") || die "Couldn't open directory: $!\n";
+  @allFiles = readdir(DD);
+  closedir(DD);
+
+  foreach $ext (@ExtList) {
+    @files = grep(/\.$ext$/, @allFiles);
+    !@files && next;
+    $numFiles = $#files + 1;
+    &Msg("Found $numFiles $ext files");
+
+    foreach $fname (@files) {
+      &processFile($fname);
+    }
+  }
+
+  chdir $prevDir || die "Couldn't switch back to dir '$prevDir': $!\n";
+}
+
+####
+####  main
+####
+
+while($_ = $ARGV[0], /^-/)
+{
+  shift;
+  last if (/^--/);
+  /^-.*v/ && $VerboseMode++;
+  /^-.*d/ && $DebugMode++;
+  /^-.*h/ && &Usage;
+  /^-.*c/ && ($FileCmd = "cp");
+}
+
+if ($#ARGV < 0) {
+  &Usage;
+}
+
+@DirList = @ARGV;
+
+foreach $dirName (@DirList) {
+  &processDir($dirName);
+}
+
+0;  
+

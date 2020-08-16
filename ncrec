@@ -1,0 +1,9 @@
+#!/bin/bash
+
+sudo firewall-cmd --add-port=12345/tcp
+
+#nc -v -v -l -p 12345 | tar xz < /dev/null
+nc -v -v -l -p 12345 | tar xz 
+
+sudo firewall-cmd --remove-port=12345/tcp
+

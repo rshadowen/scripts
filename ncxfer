@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [[ -z "$1" ]]
+then
+  echo "Usage: ncxfer DIR TARGET_MACHINE"
+  exit 1
+fi
+
+#tar cz $1 | nc -q 0 $2 12345
+tar cz $1 | nc $2 12345
+
