@@ -1,0 +1,155 @@
+#!/usr/bin/perl
+#
+
+
+########################################################################
+####
+####  Error
+####
+####  Prints an error message
+####
+sub Error {
+  print STDERR ("Error: ",@_,"\n");
+  return(1);
+}
+
+
+########################################################################
+####
+####  Info
+####
+####  Prints a message
+####
+sub Info {
+  print (@_,"\n");
+}
+
+
+########################################################################
+####
+####  Log
+####
+####  Prints a message
+####
+sub Log {
+  print STDERR ("::::  ",@_,"\n");
+}
+
+
+########################################################################
+####
+####  Do
+####
+####  Runs a system command and/or prints it
+####
+sub Do {
+  ($DebugMode || $VerboseMode) && &Log(@_);
+
+  !$DebugMode && system(@_);
+}
+
+
+########################################################################
+####
+####  Usage
+####
+####  Shows usage
+####
+sub Usage {
+  &Info("genlists [<options>] <music_dir> [<playlist_dir>] ");
+  &Info("where:");
+  &Info("  <music_dir>       dir w/ music files (wav/mp3).");
+  &Info("  <playlist_dir>    dir w/ playlist files (m3u).");
+  &Info("<options> are one or more of:");
+  &Info("  -n  no link - don't link playlists into music dir.");
+  &Info("  -v  verbose - show commands during execution.");
+  &Info("  -d  debug - show commands but do not execute them.");
+  &Info("  -h  help - show this text.");
+  &Info("  -p <prefix> - path prefix for each entry.");
+  &Info("If not given, <playlist_dir> defaults to <music_dir>/../playlist.");
+  &Info("If not given, <prefix> defaults to \\\\MESA\\atron_auto\\Music\\wav.");
+  exit 1;
+}
+
+
+########################################################################
+####
+####  main
+####
+
+$DebugMode = 0;
+$VerboseMode = 0;
+$LinkMode = 1;
+$P = "\\\\MESA\\smb\\atron_auto\\Music\\wav\\";
+
+while($_ = $ARGV[0], /^-/)
+{
+  shift;
+  last if (/^--/);
+  /^-.*v/ && $VerboseMode++;
+  /^-.*d/ && $DebugMode++;
+  /^-.*n/ && ($LinkMode = 0);
+  /^-.*h/ && &Usage;
+  /^-.*p$/ && ($P = shift);
+}
+
+$MusicDir = shift;
+!$MusicDir && &Usage;
+
+#($#ARGV == 1) && ($ListDir = shift) || ($ListDir = $MusicDir);
+if ($#ARGV == 0) {
+  $ListDir = shift;
+}
+else {
+  $ListDir = "$MusicDir/../playlist";
+}
+
+&Log("Music Dir = $MusicDir");
+&Log("List Dir  = $ListDir");
+
+opendir MD, $MusicDir || die "Couldn't open music dir '$MusicDir': $!";
+@music = grep /^\w.*\.wav$/, readdir MD;
+closedir MD;
+
+opendir LD, $ListDir || die "Couldn't open list dir '$ListDir': $!";
+@lists = grep /^\w.*\.m3u$/, readdir LD;
+closedir LD;
+
+foreach $song (@music) {
+  $song =~ /^([^-]+-[^-]+)-/;
+  $album = $1;
+  $album =~ s/ +$//;
+
+  if (!$albumFlags{$album}) {
+    $albumFlags{$album} = 1;
+    push @albums, $album;
+  }
+}
+
+foreach $album (@albums) {
+  ($artist, $title) = ( $album =~ /^([^-]+)- (.*)$/ );
+  $artist =~ s/ +$//;
+  $title =~ s/ +$//;
+
+  $album_list = "$artist - $title.m3u";
+  $artist_list = "$artist - ALL.m3u";
+
+  if (! -e "$ListDir/$album_list") {
+    @songs = sort grep /^$artist - $title - /, @music;
+    &Log("Generating $album_list");
+    open LF, ">$ListDir/$album_list" || die "Couldn't open '$album_list': $!";
+    foreach $s (@songs) {
+      print LF "$P$s\r\n";
+    }
+    close LF;
+
+    &Log("Adding $title to $artist_list");
+    open LF, ">>$ListDir/$artist_list" || die "Couldn't open '$artist_list': $!";
+    foreach $s (@songs) {
+      print LF "$P$s\r\n";
+    }
+    close LF;
+  }
+
+}
+

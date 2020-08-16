@@ -1,0 +1,132 @@
+#!/usr/bin/perl
+#
+
+
+########################################################################
+####
+####  Error
+####
+####  Prints an error message
+####
+sub Error {
+  print STDERR ("Error: ",@_,"\n");
+  return(1);
+}
+
+
+########################################################################
+####
+####  Info
+####
+####  Prints a message
+####
+sub Info {
+  print (@_,"\n");
+}
+
+
+########################################################################
+####
+####  Log
+####
+####  Prints a message
+####
+sub Log {
+  print STDERR ("::::  ",@_,"\n");
+}
+
+
+########################################################################
+####
+####  Do
+####
+####  Runs a system command and/or prints it
+####
+sub Do {
+  ($DebugMode || $VerboseMode) && &Log(@_);
+
+  !$DebugMode && system(@_);
+}
+
+
+########################################################################
+####
+####  Usage
+####
+####  Shows usage
+####
+sub Usage {
+  &Info("dirlame [<options>] <wav_dir> [<mp3_dir>]");
+  &Info("where:");
+  &Info("  <wav_dir>   dir w/ wav files.");
+  &Info("  <mp3_dir>   dir w/ mp3 files.");
+  &Info("<options> are one or more of:");
+  &Info("  -d  debug - show commands but do not execute them.");
+  &Info("  -h  help - show this text.");
+  &Info("  -v  verbose - show commands during execution.");
+  &Info("If not given, <mp3_dir> defaults to <wav_dir>.");
+  exit 1;
+}
+
+
+########################################################################
+####
+####  main
+####
+
+$DebugMode = 0;
+$VerboseMode = 0;
+
+while($_ = $ARGV[0], /^-/)
+{
+  shift;
+  last if (/^--/);
+  /^-.*v/ && $VerboseMode++;
+  /^-.*d/ && $DebugMode++;
+  /^-.*h/ && &Usage;
+}
+
+$WavDir = shift;
+!$WavDir && &Usage;
+
+$Mp3Dir = shift;
+!$Mp3Dir && ($Mp3Dir = $WavDir);
+
+&Log("Wav Dir = $WavDir");
+&Log("MP3 Dir = $Mp3Dir");
+
+opendir WD, $WavDir || die "Couldn't open WAV dir '$WavDir': $!";
+@wavlist = grep /^\w.*\.wav$/, readdir WD;
+closedir WD;
+
+opendir MD, $Mp3Dir || die "Couldn't open MP3 dir '$Mp3Dir': $!";
+@mp3list = grep /^\w.*\.mp3$/, readdir MD;
+closedir MD;
+
+foreach $wav (@wavlist) {
+  ($mp3 = $wav) =~ s/\.wav$/.mp3/;
+  -e "$Mp3Dir/$mp3" && next;
+
+  &Log("$wav -> $mp3");
+  ($song = $wav) =~ s/\.wav$//;
+  $song =~ /^([^-]+)- (.+) - ([0-9][0-9]) - (.*)$/;
+  $artist = $1;
+  $album = $2;
+  $track = $3;
+  $title = $4;
+  $artist =~ s/ $//;
+
+  &Log("  Artist:  '$artist'");
+  &Log("  Album:   '$album'");
+  &Log("  Track:   '$track'");
+  &Log("  Title:   '$title'");
+
+  $cmd = "/usr/local/bin/lame --preset standard " .
+	 "--tt \"$title\" --ta \"$artist\" --tl \"$album\" --tn \"$track\" " .
+	 "\"$WavDir/$wav\" \"$Mp3Dir/$mp3\"";
+
+  &Do($cmd);
+}
+
+exit 0;
+

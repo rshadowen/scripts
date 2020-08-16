@@ -1,0 +1,6 @@
+#!/bin/bash
+
+mach=$(hostname)
+
+xauth extract - $mach$DISPLAY | ssh $1 xauth merge -
+

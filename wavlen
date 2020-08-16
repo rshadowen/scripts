@@ -1,0 +1,165 @@
+#!/usr/bin/perl
+#
+
+########################################################################
+####
+#### L4 - load 4 byte little endian value
+####
+sub L4 
+{
+  local($c1, $c2, $c3, $c4, $v);
+
+  $c1 = getc(F);
+  $c2 = getc(F);
+  $c3 = getc(F);
+  $c4 = getc(F);
+
+  $v = ((ord $c4) << 24) | ((ord $c3) << 16) | ((ord $c2) << 8) | (ord $c1);
+  return($v);
+}
+
+
+########################################################################
+####
+#### L3 - load 3 byte little endian value
+####
+sub L3 
+{
+  local($c1, $c2, $c3, $v);
+
+  $c1 = getc(F);
+  $c2 = getc(F);
+  $c3 = getc(F);
+
+  $v = ((ord $c3) << 16) | ((ord $c2) << 8) | (ord $c1);
+  return($v);
+}
+
+
+########################################################################
+####
+#### L2 - load 2 byte little endian value
+####
+sub L2 
+{
+  local($c1, $c2, $v);
+
+  $c1 = getc(F);
+  $c2 = getc(F);
+
+  $v = ((ord $c2) << 8) | (ord $c1);
+  return($v);
+}
+
+
+########################################################################
+####
+####  ReadChunk
+####
+sub ReadChunk
+{
+  local($chunkName, $chunkLen);
+  local($rc);
+
+  $rc = read(F, $chunkName, 4);
+  ($rc != 4) && die "Error reading $F: $!\n";
+  $chunkLen = L4;
+  return ($chunkName, $chunkLen);
+}
+
+
+########################################################################
+####
+####  SeekChunk
+####
+sub SeekChunk
+{
+  local($nm) = $_[0];
+  local($chunkName, $chunkLen);
+
+  while (!eof(F)) {
+    ($chunkName, $chunkLen) = ReadChunk;
+    printf("..Found chunk '%s' (%d bytes)\n", $chunkName, $chunkLen);
+    ($chunkName eq $nm) && return($chunkLen);
+    seek(F,1,$chunkLen) || die "Couldn't seek fwd in $F: $!\n";
+  }
+  return(0);
+}
+
+
+########################################################################
+####
+####
+####
+sub ReadFmt
+{
+  local($chunkLen) = $_[0];
+
+  ($chunkLen != 16) && print("..fmt: chunklen is not 16.\n");
+  local($wFormatTag) = L2;
+  local($wChannels) = L2;
+  local($dwSamplesPerSec) = L4;
+  local($dwBytesPerSec) = L4;
+  local($wBlockAlign) = L2;
+  local($wBitsPerSample) = L2;
+
+  local($wBonusLen);
+  if ($wFormatTag != 1) {
+    $wBonusLen = L2;
+    seek(F,1,$wBonusLen) || die "Seek failure in $F: $!\n";
+  }
+  else {
+    $wBonusLen = 0;
+  }
+
+  printf("FormatTag	= %04X\n", $wFormatTag);
+  printf("Channels	= %04X\n", $wChannels);
+  printf("SamplesPerSec	= %08X (%d)\n", $dwSamplesPerSec, $dwSamplesPerSec);
+  printf("BytesPerSec	= %08X (%d)\n", $dwBytesPerSec, $dwBytesPerSec);
+  printf("BlockAlign	= %04X\n", $wBlockAlign);
+  printf("BitsPerSample	= %04X\n", $wBitsPerSample);
+
+  return ($wFormatTag, $wChannels, $dwSamplesPerSec, $dwBytesPerSec,
+	  $wBlockAlign, $wBitsPerSample, $wBonusLen);
+}
+
+
+########################################################################
+####
+####
+####
+sub OpenWav
+{
+  local($fn) = $_[0];
+
+  $F = $fn;
+  printf("Opening $F...\n");
+  open(F) || die "Couldn't open $F: $!\n";
+
+  local ($chunkName, $chunkLen) = ReadChunk;
+  ($chunkName ne "RIFF") && die "$F is not wav format.\n";
+  $rc = read(F, $chunkType, 4);
+  ($rc != 4) && die "Error reading $F: $!\n";
+  ($chunkType ne "WAVE") && die "$F is not wav format.\n";
+
+  $len = SeekChunk("fmt ") || die "Couldn't find 'fmt ' in $F.\n";
+
+  ($formatTag, $channels, $samplesPerSec, $bytesPerSec, 
+		$blockAlign, $bitsPerSample, $bonusLen) = ReadFmt($len);
+		
+  $len = SeekChunk("data") || die "Couldn't find 'data' in $F.\n";
+
+  $samples = $len / $blockAlign;
+  $sec = $samples / $samplesPerSec;
+  printf("Music length = %d seconds.\n", $sec + .5);
+}
+
+
+########################################################################
+####
+####
+####
+
+OpenWav($ARGV[0]);
+
+
